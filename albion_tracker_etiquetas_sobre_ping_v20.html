@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Albion Map Tracker - Dungeons, Campamentos y Pines</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Press+Start+2P&display=swap');
+body{user-select:none;overflow-x:hidden;font-family:'Cinzel',serif}
+#dropZone{overflow:hidden}
+.map-viewport{position:relative;width:100%;height:82vh;overflow:hidden;cursor:grab;background:#0b0f19}
+.map-viewport:active{cursor:grabbing}
+.map-container{position:absolute;transform-origin:0 0;display:inline-block}
+.pin{position:absolute;transform:translate(-50%,-100%);cursor:pointer;transition:transform .15s ease,filter .15s ease;display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,.9));z-index:5}
+.pin:hover{transform:translate(-50%,-105%) scale(1.12);z-index:50}
+.pin-body{background:linear-gradient(145deg,#303640,#11151c 70%);border:1.5px solid #a8adb5;border-radius:5px;padding:calc(2px * var(--pin-scale,1));display:flex;align-items:center;justify-content:center;gap:calc(2px * var(--pin-scale,1));position:relative;z-index:2;box-shadow:inset 0 1px 2px #ffffff18}
+.pin-resource-label{font-family:Arial,sans-serif;font-size:calc(9px * var(--pin-scale,1));font-weight:800;line-height:1;color:#f8fafc;white-space:nowrap;text-shadow:1px 1px 2px #000;letter-spacing:0;padding:0 calc(2px * var(--pin-scale,1));text-align:center;display:block;}
+.pin-text-only .pin-body{background:linear-gradient(135deg,#083344,#0e7490 55%,#164e63);border:1.5px solid #67e8f9;border-radius:7px;padding:calc(5px * var(--pin-scale,1)) calc(8px * var(--pin-scale,1));box-shadow:0 0 8px #06b6d455,inset 0 1px 2px #cffafe40}
+.pin-text-only .pin-resource-label{font-size:calc(10px * var(--pin-scale,1));font-weight:900;letter-spacing:calc(.6px * var(--pin-scale,1));color:#ecfeff;text-shadow:0 1px 3px #083344}
+ .pin-text-only .pin-pointer{border-top-color:#67e8f9}
+/* Campamentos de mercenarios: solo texto, sin iconos */
+.pin-merc-text .pin-body{border-radius:6px;padding:calc(5px * var(--pin-scale,1)) calc(8px * var(--pin-scale,1));box-shadow:0 0 8px var(--merc-glow,#00000055),inset 0 1px 2px #ffffff22;border:1.5px solid var(--merc-border,#fbbf24);background:linear-gradient(135deg,var(--merc-dark,#422006),var(--merc-mid,#92400e));}
+.pin-merc-text .pin-body{min-width:calc(94px * var(--pin-scale,1));box-sizing:border-box;text-align:center;}
+.pin-merc-text .pin-resource-label{font-size:calc(10px * var(--pin-scale,1));font-weight:900;letter-spacing:calc(.35px * var(--pin-scale,1));color:var(--merc-text,#fff7ed);text-shadow:0 1px 3px #000;padding:0 calc(2px * var(--pin-scale,1));display:block;width:100%;box-sizing:border-box;text-align:center;line-height:1.15;white-space:normal;}
+.pin-merc-large{--merc-dark:#422006;--merc-mid:#a16207;--merc-border:#facc15;--merc-text:#fef3c7;--merc-glow:#eab30855}
+.pin-merc-small{--merc-dark:#082f49;--merc-mid:#0369a1;--merc-border:#7dd3fc;--merc-text:#e0f2fe;--merc-glow:#0ea5e955}
+.pin-labeled-icon .pin-body{gap:calc(4px * var(--pin-scale,1));padding:calc(3px * var(--pin-scale,1)) calc(5px * var(--pin-scale,1));}
+.pin-labeled-icon .pin-resource-label{font-size:calc(9px * var(--pin-scale,1));font-weight:900;letter-spacing:calc(.1px * var(--pin-scale,1));white-space:nowrap;text-align:center;display:block;}
+.pin-labeled-icon.pin-spider .pin-body{background:linear-gradient(135deg,#083344,#0e7490);border-color:#67e8f9;}
+.pin-labeled-icon.pin-alert .pin-body{background:linear-gradient(135deg,#450a0a,#b91c1c);border-color:#fca5a5;}
+.pin-labeled-icon.pin-chest .pin-body{background:linear-gradient(135deg,#451a03,#b45309);border-color:#fbbf24;}
+.pin-labeled-icon.pin-portal .pin-body{background:linear-gradient(135deg,#3b0764,#7e22ce);border-color:#d8b4fe;}
+/* Pines de recursos: solo texto, con un color propio para cada recurso */
+.pin-resource-only .pin-body{border-radius:6px;padding:calc(5px * var(--pin-scale,1)) calc(8px * var(--pin-scale,1));box-shadow:0 0 7px var(--resource-glow,#00000055),inset 0 1px 2px #ffffff22;border:1.5px solid var(--resource-border,#cbd5e1);background:linear-gradient(135deg,var(--resource-dark,#1e293b),var(--resource-mid,#334155));}
+.pin-resource-only .pin-resource-label{font-size:calc(10px * var(--pin-scale,1));font-weight:900;letter-spacing:calc(.5px * var(--pin-scale,1));color:var(--resource-text,#fff);text-shadow:0 1px 3px #000; padding:0 calc(2px * var(--pin-scale,1));}
+.pin-resource-wood{--resource-dark:#422006;--resource-mid:#92400e;--resource-border:#fbbf24;--resource-text:#fef3c7;--resource-glow:#d9770655}
+.pin-resource-stone{--resource-dark:#1f2937;--resource-mid:#64748b;--resource-border:#cbd5e1;--resource-text:#f8fafc;--resource-glow:#94a3b855}
+.pin-resource-ore{--resource-dark:#083344;--resource-mid:#0e7490;--resource-border:#67e8f9;--resource-text:#ecfeff;--resource-glow:#06b6d455}
+.pin-resource-fiber{--resource-dark:#052e16;--resource-mid:#15803d;--resource-border:#86efac;--resource-text:#f0fdf4;--resource-glow:#22c55e55}
+.pin-resource-hide{--resource-dark:#4c0519;--resource-mid:#be123c;--resource-border:#fda4af;--resource-text:#fff1f2;--resource-glow:#f43f5e55}
+.pin .albion-camp-svg{width:calc(23px * var(--pin-scale,1));height:calc(23px * var(--pin-scale,1));display:block;flex-shrink:0}
+.pin-pointer{width:0;height:0;border-left:calc(5px * var(--pin-scale,1)) solid transparent;border-right:calc(5px * var(--pin-scale,1)) solid transparent;border-top:calc(6px * var(--pin-scale,1)) solid #a8adb5;margin-top:-1px;position:relative;z-index:1}
+.tier-badge{font-family:Arial,sans-serif;font-size:calc(11px * var(--pin-scale,1));font-weight:900;line-height:1;padding:calc(2px * var(--pin-scale,1)) calc(3px * var(--pin-scale,1));border-radius:3px;color:#fff;text-shadow:1px 1px 2px #000;white-space:nowrap;letter-spacing:calc(-1px * var(--pin-scale,1))}
+.pin-tier-8-0 .pin-body{border-color:#a8adb5}.pin-tier-8-0 .pin-pointer{border-top-color:#a8adb5}.tier-8-0{background:#4b5563}
+.pin-tier-8-1 .pin-body{border-color:#39c96b;box-shadow:0 0 5px #22c55e70,inset 0 1px 2px #ffffff18}.pin-tier-8-1 .pin-pointer{border-top-color:#39c96b}.tier-8-1{background:#16a34a}
+.pin-tier-8-2 .pin-body{border-color:#4b9bff;box-shadow:0 0 5px #3b82f670,inset 0 1px 2px #ffffff18}.pin-tier-8-2 .pin-pointer{border-top-color:#4b9bff}.tier-8-2{background:#2563eb}
+.pin-tier-8-3 .pin-body{border-color:#bc78ff;box-shadow:0 0 6px #a855f770,inset 0 1px 2px #ffffff18}.pin-tier-8-3 .pin-pointer{border-top-color:#bc78ff}.tier-8-3{background:#9333ea}
+.pin-tier-8-4 .pin-body{border-color:#ffc04a;box-shadow:0 0 7px #f59e0b80,inset 0 1px 2px #ffffff18}.pin-tier-8-4 .pin-pointer{border-top-color:#ffc04a}.tier-8-4{background:#d97706}
+.pin-tier-8-0 .tier-badge{color:#d1d5db;background:#4b5563}.pin-tier-8-1 .tier-badge{color:#dcfce7;background:#16a34a}.pin-tier-8-2 .tier-badge{color:#dbeafe;background:#2563eb}.pin-tier-8-3 .tier-badge{color:#f3e8ff;background:#9333ea}.pin-tier-8-4 .tier-badge{color:#fef3c7;background:#b7791f}
+.arcade-font{font-family:'Press Start 2P',monospace}
+#pasteArea{position:fixed;left:8px;bottom:8px;width:2px;height:2px;opacity:.02;overflow:hidden;z-index:2;pointer-events:none;outline:none}
+.albion-camp-svg{width:32px;height:32px;display:inline-block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.55));transition:filter .15s ease,transform .15s ease}
+.camp-svg-container .albion-camp-svg,.albion-camp-btn-svg .albion-camp-svg{filter:drop-shadow(0 2px 2px rgba(0,0,0,.65))}
+button:hover .albion-camp-svg{filter:drop-shadow(0 0 4px rgba(255,220,140,.35));transform:translateY(-1px)}
+.albion-camp-btn-svg{width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #f8fafc;background:#64748b;box-shadow:0 1px 3px #000;overflow:hidden}.albion-camp-btn-svg svg{display:none!important}#btn-group-dungeon-0-icon{background:#858585}#btn-group-dungeon-1-icon{background:#32a852}#btn-group-dungeon-2-icon{background:#3389e8}#btn-group-dungeon-3-icon{background:#a34de0}#btn-group-dungeon-4-icon{background:#d9a21b}#btn-spider-icon{background:#06b6d4}#btn-alert-icon{background:#ef4444}#btn-chest-icon{background:#f97316}#btn-portal-icon{background:#c084fc}#btn-group-camp-icon{background:#facc15}#btn-small-camp-icon{background:#38bdf8}
+.camp-svg-container .albion-camp-svg{width:29px;height:29px}
+@media(max-width:640px){.map-viewport{height:70vh}}
+
+
+/* Selector de pings: mismas formas, tamaños y colores que la leyenda */
+.albion-camp-btn-svg{display:block;width:22px;height:22px;flex:0 0 22px;margin:0 auto 5px;border:2px solid #f8fafc;box-shadow:0 1px 3px #000;box-sizing:border-box;background:#64748b;}
+#btn-group-dungeon-0-icon,#btn-group-dungeon-1-icon,#btn-group-dungeon-2-icon,#btn-group-dungeon-3-icon,#btn-group-dungeon-4-icon{border-radius:50% 50% 50% 0;transform:rotate(-45deg)}
+#btn-group-dungeon-0-icon{background:#858585}#btn-group-dungeon-1-icon{background:#32a852}#btn-group-dungeon-2-icon{background:#3389e8}#btn-group-dungeon-3-icon{background:#a34de0}#btn-group-dungeon-4-icon{background:#d9a21b}
+.selector-triangle{border-radius:0!important;transform:none!important;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+#btn-wood-icon{background:#a96b36}#btn-stone-icon{background:#a3a3a3}#btn-ore-icon{background:#22d3ee}#btn-fiber-icon{background:#4ade80}#btn-hide-icon{background:#fb7185}
+.selector-square{border-radius:0!important;transform:none!important;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)}
+#btn-group-camp-icon{background:#facc15}#btn-small-camp-icon{background:#38bdf8}#btn-spider-icon{background:#06b6d4}#btn-alert-icon{background:#ef4444}#btn-chest-icon{background:#f97316}#btn-portal-icon{background:#c084fc}
+
+/* Nuevo sistema visual: todos los pings son gotas de color */
+.map-stage{display:flex;align-items:stretch;gap:14px;width:max-content;max-width:100%;background:#0b0f19;padding:12px;box-sizing:border-box}
+.map-stage .map-viewport{flex:0 0 auto;width:auto;max-width:none}
+.pin{width:calc(22px * var(--pin-scale,1));height:calc(29px * var(--pin-scale,1));transform:translate(-50%,-100%);filter:drop-shadow(0 2px 3px #000);}
+.pin:hover{transform:translate(-50%,-105%) scale(1.12)}
+/* Etiqueta discreta encima del ping, centrada y sin bloquear clics */
+.pin-label{position:absolute;left:50%;bottom:calc(100% + 2px);transform:translateX(-50%);display:block;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:2px 5px;border-radius:4px;background:rgba(15,23,42,.82);border:1px solid var(--pin-color,#94a3b8);color:#fff;font:700 10px/1.2 Arial,sans-serif;letter-spacing:.1px;text-align:center;text-shadow:0 1px 2px #000;box-shadow:0 1px 3px #0006;pointer-events:none;z-index:3}
+.pin:hover .pin-label{background:rgba(15,23,42,.96);max-width:220px}
+.pin-body{width:calc(20px * var(--pin-scale,1));height:calc(20px * var(--pin-scale,1));min-width:0!important;min-height:0!important;padding:0!important;box-sizing:border-box;border:2px solid #f8fafc!important;border-radius:50% 50% 50% 0!important;transform:rotate(-45deg);background:var(--pin-color,#64748b)!important;box-shadow:inset -2px -2px 0 #0003,0 0 0 1px #0008!important;display:block!important;position:relative}
+.pin-body>*{display:none!important}
+.pin-pointer{display:none!important}
+.pin-kind-dungeon-0{--pin-color:#858585}.pin-kind-dungeon-1{--pin-color:#32a852}.pin-kind-dungeon-2{--pin-color:#3389e8}.pin-kind-dungeon-3{--pin-color:#a34de0}.pin-kind-dungeon-4{--pin-color:#d9a21b}
+.pin-kind-wood{--pin-color:#a96b36}.pin-kind-stone{--pin-color:#a3a3a3}.pin-kind-ore{--pin-color:#22d3ee}.pin-kind-fiber{--pin-color:#4ade80}.pin-kind-hide{--pin-color:#fb7185}.pin-kind-merc-large{--pin-color:#facc15}.pin-kind-merc-small{--pin-color:#38bdf8}.pin-kind-spider{--pin-color:#06b6d4}.pin-kind-alert{--pin-color:#ef4444}.pin-kind-chest{--pin-color:#f97316}.pin-kind-portal{--pin-color:#c084fc}
+/* Formas finales de los pings: recursos rombo, objetivos hexágono */
+.pin-kind-wood .pin-body,.pin-kind-stone .pin-body,.pin-kind-ore .pin-body,.pin-kind-fiber .pin-body,.pin-kind-hide .pin-body{border-radius:0!important;transform:none!important;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
+.pin-kind-merc-large .pin-body,.pin-kind-merc-small .pin-body,.pin-kind-spider .pin-body,.pin-kind-alert .pin-body,.pin-kind-chest .pin-body,.pin-kind-portal .pin-body{border-radius:0!important;transform:none!important;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);}
+.legend-diamond{border-radius:0!important;transform:none!important;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
+.legend-hexagon{border-radius:0!important;transform:none!important;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);}
+#btn-spider-icon,#btn-alert-icon,#btn-chest-icon,#btn-portal-icon,#btn-group-camp-icon,#btn-small-camp-icon{border-radius:0;transform:none;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)}
+.map-legend{width:220px;flex:0 0 220px;background:#111827;border:1px solid #374151;border-radius:10px;padding:12px;color:#e5e7eb;font-family:Arial,sans-serif;box-sizing:border-box;align-self:flex-start}
+.map-legend h3{font-family:Arial,sans-serif;font-weight:900;font-size:14px;letter-spacing:.08em;color:#fbbf24;margin:0 0 10px}
+.legend-section{font-size:10px;text-transform:uppercase;color:#94a3b8;font-weight:800;margin:10px 0 5px;border-bottom:1px solid #374151;padding-bottom:4px}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:11px;line-height:1.25;margin:6px 0}
+.legend-drop{width:13px;height:13px;flex:0 0 13px;border:1.5px solid #f8fafc;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 1px 2px #000}
+@media(max-width:760px){.map-stage{flex-direction:column;width:100%;gap:8px}.map-stage .map-viewport{width:100%;height:70vh}.map-legend{width:100%;flex:0 0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}.map-legend h3{grid-column:1/-1}.legend-section{grid-column:1/-1}}
+
+
+
+/* Exportación: mantener las etiquetas centradas y el texto dentro de su recuadro también en PNG */
+.pin-label{box-sizing:border-box;width:62px;max-width:62px;min-width:0;white-space:pre-line;overflow:hidden;overflow-wrap:anywhere;word-break:normal;text-overflow:clip;line-height:1.08;padding:2px 3px;font-size:9px;text-align:center;display:flex;align-items:center;justify-content:center;}
+.pin:hover .pin-label{width:62px;max-width:62px;}
+#mapStage.exporting .pin{transition:none!important;}
+#mapStage.exporting .pin-label{left:50%!important;right:auto!important;bottom:calc(100% + 2px)!important;transform:translateX(-50%)!important;margin:0!important;}
+/* En la descarga se desplazan solo las letras; el recuadro queda fijo. */
+.pin-label-text{display:block;white-space:pre-line;text-align:center;transform:translateY(0);}
+#mapStage.exporting .pin-label-text{transform:translateY(-2.75px)!important;}
+
+/* Corrección: los elementos marcados hidden deben permanecer ocultos incluso con estilos propios */
+.hidden{display:none!important}
+.map-stage.hidden{display:none!important}
+
+/* v7: recursos triangulares, otros objetivos cuadrados y etiquetas compactas en dos líneas */
+.pin-kind-wood .pin-body,.pin-kind-stone .pin-body,.pin-kind-ore .pin-body,.pin-kind-fiber .pin-body,.pin-kind-hide .pin-body{border-radius:0!important;transform:none!important;clip-path:polygon(0 0,100% 0,50% 100%)!important;}
+.pin-kind-merc-large .pin-body,.pin-kind-merc-small .pin-body,.pin-kind-spider .pin-body,.pin-kind-alert .pin-body,.pin-kind-chest .pin-body,.pin-kind-portal .pin-body{border-radius:2px!important;transform:none!important;clip-path:none!important;}
+.legend-triangle,.selector-triangle{border-radius:0!important;transform:none!important;clip-path:polygon(0 0,100% 0,50% 100%)!important;}
+.legend-square,.selector-square{border-radius:2px!important;transform:none!important;clip-path:none!important;}
+#btn-spider-icon,#btn-alert-icon,#btn-chest-icon,#btn-portal-icon{border-radius:2px!important;transform:none!important;clip-path:none!important;}
+.pin-label{width:62px;max-width:62px;white-space:pre-line;overflow:visible;text-overflow:clip;line-height:1.05;padding:2px 3px;font-size:9px;box-sizing:border-box;overflow-wrap:normal;}
+.pin:hover .pin-label{width:76px;max-width:76px;}
+
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center p-3 sm:p-6">
+<div id="pasteArea" contenteditable="true"></div>
+<header class="mb-3 text-center">
+<h1 class="text-2xl sm:text-3xl font-bold text-amber-400 arcade-font tracking-wider mb-2">ALBION TRACKER</h1>
+<p class="text-slate-400 text-xs sm:text-sm">Pega tu captura con <kbd class="bg-slate-800 px-2 py-0.5 rounded text-amber-300">Ctrl + V</kbd>, marca objetivos y ajusta el tamaño de los pines.</p>
+</header>
+
+<div class="mb-3 flex flex-wrap gap-2 sm:gap-3 items-center justify-center">
+<button id="btnPaste" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded font-medium text-xs sm:text-sm transition shadow">📋 Pegar Imagen (Ctrl + V)</button>
+<input type="file" id="fileInput" accept="image/*" class="hidden">
+<label for="fileInput" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded cursor-pointer font-medium text-xs sm:text-sm transition shadow">📁 Subir Archivo</label>
+<button id="btnFullscreen" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded font-medium text-xs sm:text-sm transition shadow">🖥️ Pantalla Completa</button>
+<div id="zoomControls" class="hidden flex gap-1 bg-slate-800 border border-slate-700 p-1 rounded-lg shadow">
+<button id="zoomIn" class="bg-slate-700 hover:bg-slate-600 text-amber-400 px-2.5 py-1 rounded font-bold text-xs sm:text-sm">🔍 +</button>
+<button id="zoomOut" class="bg-slate-700 hover:bg-slate-600 text-amber-400 px-2.5 py-1 rounded font-bold text-xs sm:text-sm">🔍 −</button>
+<button id="resetZoom" class="bg-slate-700 hover:bg-slate-600 text-slate-300 px-2.5 py-1 rounded font-semibold text-xs">🔄 Reset</button>
+<span id="zoomLevel" class="text-xs text-amber-300 flex items-center px-1.5 font-mono">100%</span>
+</div>
+<div class="flex flex-col gap-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 shadow min-w-[190px]">
+<div class="flex justify-between items-center gap-3"><label for="pinSizeRange" class="text-xs text-slate-200 font-semibold">Tamaño de pines</label><span id="pinSizeValue" class="text-xs text-amber-300 font-mono">100%</span></div>
+<input id="pinSizeRange" type="range" min="50" max="200" step="10" value="100" class="w-full accent-amber-400 cursor-pointer" aria-label="Ajustar tamaño de los pines">
+</div>
+<button id="downloadMap" class="bg-sky-700 hover:bg-sky-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded font-medium text-xs sm:text-sm transition shadow hidden">⬇️ Descargar mapa con pines</button>
+<button id="clearPins" class="bg-red-600/80 hover:bg-red-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded font-medium text-xs sm:text-sm transition shadow">🗑️ Limpiar Pines</button>
+</div>
+
+<div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-amber-500/50 rounded-xl bg-slate-900/50 w-full max-w-7xl relative overflow-hidden shadow-2xl transition">
+<div id="placeholder" class="text-center text-slate-400 py-32 px-4">
+<p class="text-xl font-semibold mb-2">📋 Presiona <span class="text-amber-400 font-bold">Ctrl + V</span> en tu teclado</p>
+<p class="text-sm text-slate-400 mb-4">O usa el botón verde de arriba <span class="text-emerald-400 font-semibold">"Pegar Imagen"</span>.</p>
+<p class="text-xs text-slate-500">Haz zoom con la rueda del ratón y arrastra la foto libremente.</p>
+</div>
+<div id="mapStage" class="map-stage hidden">
+<div id="mapViewport" class="map-viewport">
+<div id="mapContainer" class="map-container">
+<img id="mapImage" class="rounded shadow-lg block pointer-events-none" alt="Mapa de Albion">
+<div id="pinsLayer" class="absolute inset-0 pointer-events-none"></div>
+</div>
+</div>
+<aside id="mapLegend" class="map-legend">
+<h3>LEYENDA DE PINGS</h3>
+<div class="legend-section">Mazmorras grupales</div>
+<div class="legend-item"><i class="legend-drop" style="background:#858585"></i>Normal</div>
+<div class="legend-item"><i class="legend-drop" style="background:#32a852"></i>.1 Poco común</div>
+<div class="legend-item"><i class="legend-drop" style="background:#3389e8"></i>.2 Rara</div>
+<div class="legend-item"><i class="legend-drop" style="background:#a34de0"></i>.3 Épica</div>
+<div class="legend-item"><i class="legend-drop" style="background:#d9a21b"></i>.4 Legendaria</div>
+<div class="legend-section">Recursos</div>
+<div class="legend-item"><i class="legend-drop legend-triangle" style="background:#a96b36"></i>Madera</div>
+<div class="legend-item"><i class="legend-drop legend-triangle" style="background:#a3a3a3"></i>Roca / piedra</div>
+<div class="legend-item"><i class="legend-drop legend-triangle" style="background:#22d3ee"></i>Mineral</div>
+<div class="legend-item"><i class="legend-drop legend-triangle" style="background:#4ade80"></i>Fibra / tela</div>
+<div class="legend-item"><i class="legend-drop legend-triangle" style="background:#fb7185"></i>Pieles</div>
+<div class="legend-section">Otros objetivos</div>
+<div class="legend-item"><i class="legend-drop legend-square" style="background:#facc15"></i>Mercenario grande</div>
+<div class="legend-item"><i class="legend-drop legend-square" style="background:#38bdf8"></i>Mercenario pequeño</div>
+<div class="legend-item"><i class="legend-drop legend-square" style="background:#06b6d4"></i>Araña de cristal</div>
+<div class="legend-item"><i class="legend-drop legend-square" style="background:#ef4444"></i>Alerta PvP</div>
+<div class="legend-item"><i class="legend-drop legend-square" style="background:#f97316"></i>Cofre de jefe</div>
+<div class="legend-item"><i class="legend-drop legend-square" style="background:#c084fc"></i>Portal / Mist</div>
+</aside>
+</div>
+</div>
+
+<div id="pinModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 backdrop-blur-sm p-4 overflow-y-auto">
+<div class="bg-slate-900 border border-amber-600/40 p-5 rounded-2xl shadow-2xl text-center max-w-2xl w-full my-auto">
+<h3 class="text-xl font-bold text-amber-400 mb-1">Selecciona el objetivo</h3>
+<p class="text-slate-400 text-xs mb-4">Campamentos, dungeons y puntos de interés</p>
+<div class="bg-slate-950 p-3 rounded-xl border border-slate-800 mb-4">
+<span class="text-xs font-semibold text-emerald-300 block mb-2">🛡️ CONTENIDO GRUPAL · MAZMORRAS</span>
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+<button onclick="addPin('group_dungeon','Mazmorra grupal normal','pin-tier-8-0','tier-8-0','')" class="bg-slate-800/80 hover:bg-slate-700 border border-gray-500/60 p-2 rounded-xl flex flex-col items-center transition"><div class="albion-camp-btn-svg" id="btn-group-dungeon-0-icon"></div><span class="text-[10px] text-gray-300 font-bold mt-1">Normal</span></button>
+<button onclick="addPin('group_dungeon','Mazmorra grupal poco común','pin-tier-8-1','tier-8-1','★')" class="bg-green-950/50 hover:bg-green-900/70 border border-green-500/50 p-2 rounded-xl flex flex-col items-center transition"><div class="albion-camp-btn-svg" id="btn-group-dungeon-1-icon"></div><span class="text-[10px] text-green-300 font-bold mt-1">Poco común</span></button>
+<button onclick="addPin('group_dungeon','Mazmorra grupal rara','pin-tier-8-2','tier-8-2','★★')" class="bg-blue-950/50 hover:bg-blue-900/70 border border-blue-500/50 p-2 rounded-xl flex flex-col items-center transition"><div class="albion-camp-btn-svg" id="btn-group-dungeon-2-icon"></div><span class="text-[10px] text-blue-300 font-bold mt-1">Rara</span></button>
+<button onclick="addPin('group_dungeon','Mazmorra grupal épica','pin-tier-8-3','tier-8-3','★★★')" class="bg-purple-950/50 hover:bg-purple-900/70 border border-purple-500/50 p-2 rounded-xl flex flex-col items-center transition"><div class="albion-camp-btn-svg" id="btn-group-dungeon-3-icon"></div><span class="text-[10px] text-purple-300 font-bold mt-1">Épica</span></button>
+<button onclick="addPin('group_dungeon','Mazmorra grupal legendaria','pin-tier-8-4','tier-8-4','★★★★')" class="bg-amber-950/50 hover:bg-amber-900/70 border border-amber-500/60 p-2 rounded-xl flex flex-col items-center transition"><div class="albion-camp-btn-svg" id="btn-group-dungeon-4-icon"></div><span class="text-[10px] text-amber-300 font-bold mt-1">Legendaria</span></button>
+</div></div>
+<div class="bg-slate-950 p-3 rounded-xl border border-slate-800 mb-4">
+<span class="text-xs font-semibold text-emerald-400 block mb-2">🏕️ CAMPAMENTOS DE RECURSOS</span>
+<div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+<button onclick="addPin('camp_wood','Campamento de Madera')" class="bg-amber-950/40 hover:bg-amber-900/60 border border-amber-600/50 p-2 rounded-xl flex flex-col items-center"><i class="albion-camp-btn-svg selector-triangle" id="btn-wood-icon"></i><span class="text-[10px] text-amber-300 mt-1 font-bold">Madera</span></button>
+<button onclick="addPin('camp_stone','Campamento de Piedra')" class="bg-slate-800/80 hover:bg-slate-700/90 border border-slate-500/50 p-2 rounded-xl flex flex-col items-center"><i class="albion-camp-btn-svg selector-triangle" id="btn-stone-icon"></i><span class="text-[10px] text-slate-300 mt-1 font-bold">Piedra</span></button>
+<button onclick="addPin('camp_ore','Campamento de Mineral')" class="bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/50 p-2 rounded-xl flex flex-col items-center"><i class="albion-camp-btn-svg selector-triangle" id="btn-ore-icon"></i><span class="text-[10px] text-cyan-300 mt-1 font-bold">Mineral</span></button>
+<button onclick="addPin('camp_fiber','Campamento de Tela / Fibra')" class="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/50 p-2 rounded-xl flex flex-col items-center"><i class="albion-camp-btn-svg selector-triangle" id="btn-fiber-icon"></i><span class="text-[10px] text-emerald-300 mt-1 font-bold">Tela / Fibra</span></button>
+<button onclick="addPin('camp_hide','Campamento de Pieles')" class="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-600/50 p-2 rounded-xl flex flex-col items-center"><i class="albion-camp-btn-svg selector-triangle" id="btn-hide-icon"></i><span class="text-[10px] text-rose-300 mt-1 font-bold">Pieles</span></button>
+
+
+</div></div>
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+<button onclick="addPin('camp_merc','Campamento de mercenarios grande (grupal)')" class="bg-yellow-950/50 hover:bg-yellow-900/70 border border-yellow-500/60 p-2 rounded-xl flex flex-col items-center"><i class="albion-camp-btn-svg selector-square" id="btn-group-camp-icon"></i><span class="text-[10px] text-yellow-300 mt-1 font-bold">Mercenario<br>grande</span></button>
+<button onclick="addPin('camp_merc_small','Campamento de mercenario pequeño (solitario)')" class="bg-sky-950/50 hover:bg-sky-900/70 border border-sky-500/60 p-2 rounded-xl flex flex-col items-center"><i class="albion-camp-btn-svg selector-square" id="btn-small-camp-icon"></i><span class="text-[10px] text-sky-300 mt-1 font-bold">Mercenario<br>pequeño</span></button>
+<button onclick="addPin('spider','Araña')" class="bg-slate-800 hover:bg-cyan-950/80 border border-cyan-500/50 p-2 rounded-xl flex flex-col items-center"><div class="albion-camp-btn-svg" id="btn-spider-icon"></div><span class="text-[10px] text-cyan-300 font-bold">Araña</span></button>
+<button onclick="addPin('alert','Alerta / PvP')" class="bg-slate-800 hover:bg-red-950/80 border border-red-500/50 p-2 rounded-xl flex flex-col items-center"><div class="albion-camp-btn-svg" id="btn-alert-icon"></div><span class="text-[10px] text-red-300 font-bold">Alerta PvP</span></button>
+<button onclick="addPin('chest','Cofre de Tesoro')" class="bg-slate-800 hover:bg-amber-950/80 border border-amber-500/50 p-2 rounded-xl flex flex-col items-center"><div class="albion-camp-btn-svg" id="btn-chest-icon"></div><span class="text-[10px] text-amber-300 font-bold">Cofre Boss</span></button>
+<button onclick="addPin('portal','Portal Mágico / Mist')" class="bg-slate-800 hover:bg-purple-950/80 border border-purple-500/50 p-2 rounded-xl flex flex-col items-center"><div class="albion-camp-btn-svg" id="btn-portal-icon"></div><span class="text-[10px] text-purple-300 font-bold">Portal Mist</span></button>
+</div>
+<button onclick="closeModal()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg font-medium transition border border-slate-700">Cancelar</button>
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+const fileInput=document.getElementById('fileInput'),dropZone=document.getElementById('dropZone'),placeholder=document.getElementById('placeholder'),mapViewport=document.getElementById('mapViewport'),mapContainer=document.getElementById('mapContainer'),mapImage=document.getElementById('mapImage'),pinsLayer=document.getElementById('pinsLayer'),pinModal=document.getElementById('pinModal'),clearPinsBtn=document.getElementById('clearPins'),zoomControls=document.getElementById('zoomControls'),zoomLevelDisplay=document.getElementById('zoomLevel'),btnPaste=document.getElementById('btnPaste'),pasteArea=document.getElementById('pasteArea'),btnFullscreen=document.getElementById('btnFullscreen'),pinSizeRange=document.getElementById('pinSizeRange'),pinSizeValue=document.getElementById('pinSizeValue'),downloadMapBtn=document.getElementById('downloadMap');
+let pinSize=100;
+document.documentElement.style.setProperty('--pin-scale','1');
+pinSizeRange.addEventListener('input',()=>{pinSize=Number(pinSizeRange.value);pinSizeValue.textContent=pinSize+'%';document.documentElement.style.setProperty('--pin-scale',String(pinSize/100));});
+let pins=[],tempClickCoords={x:0,y:0},scale=1,panX=0,panY=0,isDragging=false,startX=0,startY=0,hasDragged=false;
+
+const ALBION_CAMPS={
+camp_wood:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 43L42 26L54 33L24 51Z" fill="#7a4725" stroke="#e8b77a" stroke-width="2.5"/><path d="M12 43L24 51L24 57L12 49Z" fill="#4b2b18" stroke="#b77b43" stroke-width="1.5"/><ellipse cx="42" cy="29.5" rx="6" ry="4" transform="rotate(-30 42 29.5)" fill="#dca36a" stroke="#f7d6a5" stroke-width="2"/><path d="M9 28L39 11L51 18L21 36Z" fill="#a96b36" stroke="#edc18b" stroke-width="2.5"/><path d="M9 28L21 36L21 42L9 34Z" fill="#63391f"/><ellipse cx="39" cy="14.5" rx="6" ry="4" transform="rotate(-30 39 14.5)" fill="#e0ad76" stroke="#f8d9aa" stroke-width="2"/></svg>`,
+camp_stone:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 43L15 27L29 22L38 31L34 47L19 53Z" fill="#7d8995" stroke="#e1e7ec" stroke-width="2.5" stroke-linejoin="round"/><path d="M15 27L25 34L19 53L8 43Z" fill="#56616d"/><path d="M25 34L38 31L34 47L19 53Z" fill="#aeb8c1"/><path d="M30 19L39 8L53 12L59 24L48 34L36 30Z" fill="#a7b2bd" stroke="#f0f4f7" stroke-width="2.5" stroke-linejoin="round"/><path d="M39 8L36 30L30 19Z" fill="#6c7884"/><path d="M39 8L53 12L59 24L48 34L36 30Z" fill="#d4dce3"/></svg>`,
+camp_ore:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 40L16 21L30 15L42 23L39 42L25 53L12 50Z" fill="#176b8b" stroke="#a5f0ff" stroke-width="2.5" stroke-linejoin="round"/><path d="M16 21L25 32L12 50L8 40Z" fill="#10445f"/><path d="M25 32L42 23L39 42L25 53Z" fill="#2ca9d0"/><path d="M30 15L39 7L53 12L58 25L47 35L39 28Z" fill="#58c9e9" stroke="#d3f8ff" stroke-width="2.5" stroke-linejoin="round"/><path d="M39 7L39 28L30 15Z" fill="#1d8db8"/><path d="M39 28L58 25L47 35Z" fill="#b5f4ff"/></svg>`,
+camp_fiber:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M32 55V29" stroke="#8b6339" stroke-width="4" stroke-linecap="round"/><path d="M32 39C14 39 10 26 12 15C27 17 35 26 32 39Z" fill="#4d9b45" stroke="#b7ef93" stroke-width="2.5"/><path d="M32 31C31 17 41 9 53 9C55 24 47 34 32 37Z" fill="#76bd4d" stroke="#d7f6a6" stroke-width="2.5"/><path d="M32 48C18 48 15 39 16 31C28 32 34 39 32 48Z" fill="#347d3b" stroke="#a4dc79" stroke-width="2.2"/><path d="M32 39L18 22M32 31L48 15M32 48L21 36" stroke="#e2f7bd" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+camp_hide:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 12L37 9L51 19L47 35L55 44L43 55L24 51L12 38L17 12Z" fill="#9a6034" stroke="#f0c28b" stroke-width="2.5" stroke-linejoin="round"/><path d="M17 12L30 24L24 51L12 38Z" fill="#754321"/><path d="M30 24L51 19L47 35L55 44L43 55L24 51Z" fill="#bf8651"/><path d="M30 24L37 9M30 24L47 35M24 51L30 24" stroke="#e6b47c" stroke-width="2" stroke-linecap="round"/><path d="M20 17L27 19" stroke="#ffe0b6" stroke-width="2" stroke-linecap="round"/></svg>`,
+camp_merc:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M32 7L51 15V31C51 43 42 52 32 58C22 52 13 43 13 31V15Z" fill="#9a7429" stroke="#ffe09a" stroke-width="3"/><path d="M32 14L44 19V31C44 39 38 45 32 49C26 45 20 39 20 31V19Z" fill="#4a5661" stroke="#d9e1e7" stroke-width="2"/><path d="M17 16L47 47M47 16L17 47" stroke="#e6edf2" stroke-width="5" stroke-linecap="round"/><path d="M13 12L21 13L20 22L15 23Z" fill="#d4dee5" stroke="#fff" stroke-width="1.5"/><path d="M43 41L51 42L50 51L45 52Z" fill="#d4dee5" stroke="#fff" stroke-width="1.5"/><path d="M32 22L36 27L32 32L28 27Z" fill="#f3c85b" stroke="#fff0b5" stroke-width="1.3"/></svg>`,
+camp_merc_small:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M32 7L51 15V31C51 43 42 52 32 58C22 52 13 43 13 31V15Z" fill="#267a9c" stroke="#a9e8ff" stroke-width="3"/><path d="M32 15L44 20V31C44 38 38 44 32 48C26 44 20 38 20 31V20Z" fill="#153f5b" stroke="#e0f7ff" stroke-width="2"/><path d="M32 21L36 28L32 36L28 28Z" fill="#67d6ed" stroke="#d8fbff" stroke-width="1.5"/><path d="M24 39L32 44L40 39" stroke="#a9e8ff" stroke-width="2" stroke-linecap="round"/></svg>`,
+dungeon:`<svg class="albion-camp-svg dungeon-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 57V29C9 15 19 6 32 6S55 15 55 29V57Z" fill="#303844" stroke="#b7c2cf" stroke-width="3"/><path d="M16 56V30C16 20 22 13 32 13S48 20 48 30V56Z" fill="#182330" stroke="#6c8297" stroke-width="2"/><path d="M22 56V31C22 24 26 18 32 18S42 24 42 31V56Z" fill="#2ca3d0"/><path d="M27 56V32C27 27 29 23 32 23S37 27 37 32V56Z" fill="#b7f1ff"/><path d="M5 57H59" stroke="#e0e5eb" stroke-width="4" stroke-linecap="round"/><path d="M13 18L18 22M51 18L46 22" stroke="#e4edf5" stroke-width="2.4" stroke-linecap="round"/></svg>`,
+group_dungeon:`<svg class="albion-camp-svg group-dungeon-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 55V30C7 17 17 8 30 8S53 17 53 30V55Z" fill="#303b45" stroke="#d7c6a0" stroke-width="3"/><path d="M14 55V31C14 21 20 15 30 15S46 21 46 31V55Z" fill="#182b31" stroke="#718a84" stroke-width="2"/><path d="M20 55V32C20 25 24 20 30 20S40 25 40 32V55Z" fill="#348c76"/><path d="M25 55V33C25 28 27 25 30 25S35 28 35 33V55Z" fill="#c5efc7"/><path d="M4 55H56" stroke="#e6dcc4" stroke-width="4" stroke-linecap="round"/><path d="M49 11L54 5L59 11L54 17Z" fill="#d9b65c" stroke="#fff0b4" stroke-width="1.5"/><path d="M11 14L15 10L19 14L15 18Z" fill="#d9b65c" stroke="#fff0b4" stroke-width="1.5"/></svg>`,
+group_camp:`<svg class="albion-camp-svg group-camp-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 49L21 16L37 49Z" fill="#6a4727" stroke="#d8b77a" stroke-width="2.4" stroke-linejoin="round"/><path d="M21 16L37 49H21Z" fill="#3e2a1a"/><path d="M26 49L43 22L59 49Z" fill="#80572c" stroke="#f0ca77" stroke-width="2.4" stroke-linejoin="round"/><path d="M43 22L59 49H43Z" fill="#51351c"/><path d="M13 49H51" stroke="#d9c29b" stroke-width="3" stroke-linecap="round"/><path d="M32 18L44 30M44 18L32 30" stroke="#dfe8ed" stroke-width="3" stroke-linecap="round"/><path d="M29 15L32 10L35 15L32 20Z" fill="#d8ae51" stroke="#fff0b5" stroke-width="1.4"/></svg>`,
+spider:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs><linearGradient id="crystalSpider" x1="12" y1="12" x2="52" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#f0ffff"/><stop offset=".45" stop-color="#55eaff"/><stop offset="1" stop-color="#3978ff"/></linearGradient></defs>
+<g stroke="url(#crystalSpider)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M24 25L14 16L7 21L17 31L10 37L12 45L22 43L27 37M40 25L50 16L57 21L47 31L54 37L52 45L42 43L37 37"/><path d="M23 20L18 11M41 20L46 11"/></g>
+<path d="M32 17L43 25L41 39L32 49L23 39L21 25Z" fill="url(#crystalSpider)" stroke="#e8ffff" stroke-width="2.5" stroke-linejoin="round"/><path d="M32 17L32 33L21 25Z" fill="#f3ffff"/><path d="M32 33L43 25L41 39Z" fill="#79f4ff"/><path d="M32 33L23 39L32 49Z" fill="#3267d8"/><path d="M26 29L29 31M38 29L35 31" stroke="#102a56" stroke-width="3" stroke-linecap="round"/><path d="M29 37L32 39L35 37" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+</svg>`,
+alert:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none"><path d="M32 6L54 16V34C54 48 32 58 32 58S10 48 10 34V16Z" fill="#dc2626" stroke="#fca5a5" stroke-width="3"/><path d="M32 18V32M32 40H32.02" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/></svg>`,
+chest:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none"><path d="M10 26H54V50C54 53 51 56 48 56H16C13 56 10 53 10 50Z" fill="#b45309" stroke="#fbbf24" stroke-width="3"/><path d="M10 26C10 16 20 12 32 12S54 16 54 26Z" fill="#d97706" stroke="#fbbf24" stroke-width="3"/><rect x="26" y="24" width="12" height="16" rx="3" fill="#fbbf24"/></svg>`,
+portal:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="24" fill="#a855f7" stroke="#e9d5ff" stroke-width="3"/><circle cx="32" cy="32" r="15" fill="#7e22ce"/><circle cx="32" cy="32" r="8" fill="#fff"/></svg>`
+};
+
+function initIcons(){
+const ids={'btn-group-camp-icon':'camp_merc','btn-small-camp-icon':'camp_merc_small','btn-group-dungeon-0-icon':'group_dungeon','btn-group-dungeon-1-icon':'group_dungeon','btn-group-dungeon-2-icon':'group_dungeon','btn-group-dungeon-3-icon':'group_dungeon','btn-group-dungeon-4-icon':'group_dungeon','btn-spider-icon':'spider','btn-alert-icon':'alert','btn-chest-icon':'chest','btn-portal-icon':'portal'};
+Object.entries(ids).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.innerHTML=ALBION_CAMPS[key]});
+}
+window.addEventListener('DOMContentLoaded',initIcons);
+function keepFocus(){try{pasteArea.focus({preventScroll:true})}catch(_){pasteArea.focus()}}
+document.addEventListener('click',e=>{if(!e.target.closest('button,label,input,textarea,select'))keepFocus()});
+btnFullscreen.addEventListener('click',async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(e){alert('El navegador no permitió activar pantalla completa.')}});
+function handlePastedImage(e){
+ const data=e.clipboardData||window.clipboardData;
+ if(!data)return false;
+ const items=Array.from(data.items||[]);
+ for(const item of items){
+  if(item.type&&item.type.startsWith('image/')){
+   const blob=item.getAsFile();
+   if(blob){e.preventDefault();loadImage(blob);return true;}
+  }
+ }
+ const files=Array.from(data.files||[]).filter(f=>f.type&&f.type.startsWith('image/'));
+ if(files.length){e.preventDefault();loadImage(files[0]);return true;}
+ return false;
+}
+// Un solo listener evita procesar la misma imagen dos veces.
+window.addEventListener('paste',e=>{
+ if(handlePastedImage(e))return;
+ // Compatibilidad con aplicaciones que pegan la imagen como HTML.
+ setTimeout(()=>{
+  const imgs=pasteArea.getElementsByTagName('img');
+  if(imgs.length&&imgs[0].src){
+   const src=imgs[0].src;
+   pasteArea.innerHTML='';
+   const img=new Image();
+   img.onload=()=>{mapImage.onload=showMap;mapImage.src=src};
+   img.src=src;
+  }
+ },80);
+},true);
+btnPaste.addEventListener('click',async()=>{
+ try{
+  if(navigator.clipboard&&navigator.clipboard.read){
+   const items=await navigator.clipboard.read();
+   for(const item of items){
+    const type=item.types.find(t=>t.startsWith('image/'));
+    if(type){loadImage(await item.getType(type));return;}
+   }
+   alert('No se encontró una imagen en el portapapeles. Haz una captura con Win + Shift + S y vuelve a pulsar Pegar Imagen.');
+  }else{
+   keepFocus();
+   alert('Haz clic en Aceptar y presiona Ctrl + V. Si no funciona, usa Subir Archivo.');
+  }
+ }catch(e){
+  keepFocus();
+  alert('Chrome bloqueó el acceso directo al portapapeles. Cierra este aviso y presiona Ctrl + V; si sigue sin funcionar, usa Subir Archivo.');
+ }
+});
+document.addEventListener('keydown',e=>{
+ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){
+  // Deja que el evento paste del navegador entregue los datos de imagen.
+  keepFocus();
+ }
+});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadImage(e.target.files[0]);e.target.value=''});
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('border-amber-400')});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('border-amber-400'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('border-amber-400');if(e.dataTransfer.files[0])loadImage(e.dataTransfer.files[0])});
+function loadImage(file){if(!file||!file.type?.startsWith('image/')){alert('Selecciona un archivo de imagen válido.');return}const reader=new FileReader();reader.onload=e=>{mapImage.onload=showMap;mapImage.src=e.target.result};reader.readAsDataURL(file)}
+function showMap(){
+ if(!mapImage.naturalWidth||!mapImage.naturalHeight)return;
+ placeholder.classList.add('hidden');
+ document.getElementById('mapStage').classList.remove('hidden');
+ mapViewport.classList.remove('hidden');
+ zoomControls.classList.remove('hidden');
+ downloadMapBtn.classList.remove('hidden');
+ mapImage.style.width=mapImage.naturalWidth+'px';
+ mapImage.style.height=mapImage.naturalHeight+'px';
+ mapImage.style.maxWidth='none';mapImage.style.maxHeight='none';
+ mapContainer.style.left='0px';mapContainer.style.top='0px';
+ mapContainer.style.width=mapImage.naturalWidth+'px';
+ mapContainer.style.height=mapImage.naturalHeight+'px';
+ const availableWidth=Math.max(320,window.innerWidth-300);
+ mapViewport.style.width=Math.min(mapImage.naturalWidth,availableWidth)+'px';
+ resetZoomAndPan();pins=[];renderPins();
+}
+function updateTransform(){mapContainer.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;zoomLevelDisplay.innerText=`${Math.round(scale*100)}%`}
+function resetZoomAndPan(){scale=1;panX=0;panY=0;updateTransform()}
+document.getElementById('zoomIn').addEventListener('click',()=>{scale=Math.min(scale*1.3,10);updateTransform()});
+document.getElementById('zoomOut').addEventListener('click',()=>{scale=Math.max(scale/1.3,.4);updateTransform()});
+document.getElementById('resetZoom').addEventListener('click',resetZoomAndPan);
+mapViewport.addEventListener('wheel',e=>{e.preventDefault();const rect=mapViewport.getBoundingClientRect(),mx=e.clientX-rect.left,my=e.clientY-rect.top;let ns=e.deltaY<0?scale*1.15:scale/1.15;ns=Math.min(Math.max(ns,.4),10);panX=mx-(mx-panX)*(ns/scale);panY=my-(my-panY)*(ns/scale);scale=ns;updateTransform()},{passive:false});
+mapViewport.addEventListener('mousedown',e=>{if(e.button!==0&&e.button!==1)return;isDragging=true;hasDragged=false;startX=e.clientX-panX;startY=e.clientY-panY});
+window.addEventListener('mousemove',e=>{if(!isDragging)return;const dx=e.clientX-(startX+panX),dy=e.clientY-(startY+panY);if(Math.abs(dx)>3||Math.abs(dy)>3)hasDragged=true;panX=e.clientX-startX;panY=e.clientY-startY;updateTransform()});
+window.addEventListener('mouseup',()=>{isDragging=false});
+mapViewport.addEventListener('click',e=>{
+ if(hasDragged||e.target.closest('.pin')||!mapImage.naturalWidth)return;
+ const r=mapImage.getBoundingClientRect();
+ if(!r.width||!r.height)return;
+ const x=(e.clientX-r.left)/r.width*100,y=(e.clientY-r.top)/r.height*100;
+ if(x>=0&&x<=100&&y>=0&&y<=100){
+  tempClickCoords={x,y};
+  pinModal.classList.remove('hidden');pinModal.classList.add('flex');
+ }
+});
+function addPin(iconType,label,pinTierClass='',badgeClass='',tierText=''){pins.push({x:tempClickCoords.x,y:tempClickCoords.y,iconType,label,pinTierClass,badgeClass,tierText});closeModal();renderPins()}
+function closeModal(){pinModal.classList.add('hidden');pinModal.classList.remove('flex')}
+function renderPins(){
+ pinsLayer.innerHTML='';
+ pins.forEach((pin,index)=>{
+  const el=document.createElement('div');
+  let kind='';
+  if(pin.iconType==='group_dungeon'){
+   const tier=(pin.pinTierClass||'').match(/pin-tier-8-([0-4])/); kind='dungeon-'+(tier?tier[1]:'0');
+  } else {
+   const kinds={camp_wood:'wood',camp_stone:'stone',camp_ore:'ore',camp_fiber:'fiber',camp_hide:'hide',camp_merc:'merc-large',camp_merc_small:'merc-small',spider:'spider',alert:'alert',chest:'chest',portal:'portal'};
+   kind=kinds[pin.iconType]||'stone';
+  }
+  el.className=`pin pointer-events-auto pin-kind-${kind}`;
+  el.style.left=`${pin.x}%`;el.style.top=`${pin.y}%`;
+  el.innerHTML='<span class="pin-label"><span class="pin-label-text"></span></span><div class="pin-body" aria-hidden="true"></div><div class="pin-pointer"></div>';
+  const compactLabels={
+   'Mazmorra grupal normal':'Mazmo.\nNormal','Mazmorra grupal poco común':'Mazmo.\nPoco común','Mazmorra grupal rara':'Mazmo.\nRara','Mazmorra grupal épica':'Mazmo.\nÉpica','Mazmorra grupal legendaria':'Mazmo.\nLegendaria',
+   'Campamento de Madera':'Camp.\nMadera','Campamento de Piedra':'Camp.\nPiedra','Campamento de Mineral':'Camp.\nMineral','Campamento de Tela / Fibra':'Tela /\nFibra','Campamento de Pieles':'Camp.\nPieles',
+   'Campamento de mercenarios grande (grupal)':'Merca.\nGrande','Campamento de mercenario pequeño (solitario)':'Merca.\nPequeño',
+   'Araña':'Araña','Alerta / PvP':'Alerta\nPvP','Cofre de Tesoro':'Cofre\nBoss','Portal Mágico / Mist':'Portal\nMist'
+  };
+  el.querySelector('.pin-label-text').textContent=compactLabels[pin.label]||pin.label;
+  el.title=`${pin.label} (Pin #${index+1}) — clic para eliminar`;
+  el.setAttribute('aria-label',el.title);
+  el.addEventListener('click',e=>{e.stopPropagation();pins.splice(index,1);renderPins()});
+  pinsLayer.appendChild(el);
+ });
+}
+downloadMapBtn.addEventListener('click',async()=>{if(!mapImage.src||!mapImage.naturalWidth){alert('Primero pega o carga un mapa.');return;}if(typeof html2canvas!=='function'){alert('No se pudo cargar el exportador. Revisa tu conexión a internet e inténtalo otra vez.');return;}const oldTransform=mapContainer.style.transform,oldWidth=mapContainer.style.width,oldHeight=mapContainer.style.height,oldImgWidth=mapImage.style.width,oldImgHeight=mapImage.style.height,oldViewportHeight=mapViewport.style.height,stageWidth=document.getElementById('mapStage').style.width,stagePadding=document.getElementById('mapStage').style.padding;try{downloadMapBtn.disabled=true;downloadMapBtn.textContent='Preparando imagen…';mapContainer.style.transform='none';mapContainer.style.width=mapImage.naturalWidth+'px';mapContainer.style.height=mapImage.naturalHeight+'px';mapImage.style.width=mapImage.naturalWidth+'px';mapImage.style.height=mapImage.naturalHeight+'px';mapViewport.style.width=mapImage.naturalWidth+'px';mapViewport.style.height=mapImage.naturalHeight+'px';const stage=document.getElementById('mapStage');stage.classList.add('exporting');stage.style.width=(mapImage.naturalWidth+246)+'px';stage.style.padding='12px';await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const canvas=await html2canvas(stage,{backgroundColor:'#0b0f19',scale:2,useCORS:true,allowTaint:false,logging:false,width:mapImage.naturalWidth+246,height:Math.max(mapImage.naturalHeight,document.getElementById('mapLegend').offsetHeight)+24,windowWidth:Math.max(window.innerWidth,mapImage.naturalWidth+260),windowHeight:Math.max(window.innerHeight,mapImage.naturalHeight+30)});const link=document.createElement('a');link.download='albion-mapa-con-pines.png';link.href=canvas.toDataURL('image/png');link.click();}catch(err){console.error(err);alert('No se pudo exportar la imagen. Prueba nuevamente.');}finally{document.getElementById('mapStage').classList.remove('exporting');mapContainer.style.transform=oldTransform;mapContainer.style.width=oldWidth;mapContainer.style.height=oldHeight;mapImage.style.width=oldImgWidth;mapImage.style.height=oldImgHeight;mapViewport.style.height=oldViewportHeight;mapViewport.style.width='';document.getElementById('mapStage').style.width=stageWidth;document.getElementById('mapStage').style.padding=stagePadding;downloadMapBtn.disabled=false;downloadMapBtn.textContent='⬇️ Descargar mapa con pines';}});
+clearPinsBtn.addEventListener('click',()=>{pins=[];renderPins()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+</script>
+</body>
+</html>
