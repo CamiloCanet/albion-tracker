@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Albion Map Tracker - Dungeons, Campamentos y Pines</title>
+<title>Albion Tracker v21.1 Experimental - Etiquetas y respaldo</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Press+Start+2P&display=swap');
@@ -75,6 +75,21 @@ button:hover .albion-camp-svg{filter:drop-shadow(0 0 4px rgba(255,220,140,.35));
 /* Etiqueta discreta encima del ping, centrada y sin bloquear clics */
 .pin-label{position:absolute;left:50%;bottom:calc(100% + 2px);transform:translateX(-50%);display:block;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:2px 5px;border-radius:4px;background:rgba(15,23,42,.82);border:1px solid var(--pin-color,#94a3b8);color:#fff;font:700 10px/1.2 Arial,sans-serif;letter-spacing:.1px;text-align:center;text-shadow:0 1px 2px #000;box-shadow:0 1px 3px #0006;pointer-events:none;z-index:3}
 .pin:hover .pin-label{background:rgba(15,23,42,.96);max-width:220px}
+/* v21.1: historial local y borrado seguro por clic derecho */
+#undoPins,#redoPins,#saveBackup,#loadBackup,#clearPins{white-space:nowrap}
+#saveStatus{max-width:220px;text-align:center}
+.pin{touch-action:manipulation}
+.pin-label{user-select:none}
+/* v21 experimental: etiquetas despejadas solo al pasar sobre un grupo */
+#pinsLayer{overflow:visible}
+.pin-label{display:none;left:calc(50% + var(--label-dx,0px));bottom:calc(100% + var(--label-dy,2px));max-width:220px;white-space:nowrap;z-index:8}
+.pin.cluster-label-active .pin-label{display:block}
+.pin-cluster-line{stroke:rgba(255,255,255,.85);stroke-width:1.4;filter:drop-shadow(0 1px 1px #000);vector-effect:non-scaling-stroke}
+#pinsLayer .pin-cluster-lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:4}
+#pinsLayer .pin{z-index:5}
+#pinsLayer .pin.cluster-label-active{z-index:9}
+#mapStage.exporting .pin-label{display:block!important;left:50%!important;bottom:calc(100% + 2px)!important;transform:translateX(-50%)!important}
+
 .pin-body{width:calc(20px * var(--pin-scale,1));height:calc(20px * var(--pin-scale,1));min-width:0!important;min-height:0!important;padding:0!important;box-sizing:border-box;border:2px solid #f8fafc!important;border-radius:50% 50% 50% 0!important;transform:rotate(-45deg);background:var(--pin-color,#64748b)!important;box-shadow:inset -2px -2px 0 #0003,0 0 0 1px #0008!important;display:block!important;position:relative}
 .pin-body>*{display:none!important}
 .pin-pointer{display:none!important}
@@ -123,7 +138,7 @@ button:hover .albion-camp-svg{filter:drop-shadow(0 0 4px rgba(255,220,140,.35));
 <div id="pasteArea" contenteditable="true"></div>
 <header class="mb-3 text-center">
 <h1 class="text-2xl sm:text-3xl font-bold text-amber-400 arcade-font tracking-wider mb-2">ALBION TRACKER</h1>
-<p class="text-slate-400 text-xs sm:text-sm">Pega tu captura con <kbd class="bg-slate-800 px-2 py-0.5 rounded text-amber-300">Ctrl + V</kbd>, marca objetivos y ajusta el tamaño de los pines.</p>
+<p class="text-slate-400 text-xs sm:text-sm">Pega tu captura con <kbd class="bg-slate-800 px-2 py-0.5 rounded text-amber-300">Ctrl + V</kbd>. Clic izquierdo para colocar/ver; clic derecho sobre un ping propio para borrarlo. Usa Deshacer o Guardar copia si te equivocas.</p>
 </header>
 
 <div class="mb-3 flex flex-wrap gap-2 sm:gap-3 items-center justify-center">
@@ -142,8 +157,16 @@ button:hover .albion-camp-svg{filter:drop-shadow(0 0 4px rgba(255,220,140,.35));
 <input id="pinSizeRange" type="range" min="50" max="200" step="10" value="100" class="w-full accent-amber-400 cursor-pointer" aria-label="Ajustar tamaño de los pines">
 </div>
 <button id="downloadMap" class="bg-sky-700 hover:bg-sky-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded font-medium text-xs sm:text-sm transition shadow hidden">⬇️ Descargar mapa con pines</button>
-<button id="clearPins" class="bg-red-600/80 hover:bg-red-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded font-medium text-xs sm:text-sm transition shadow">🗑️ Limpiar Pines</button>
+<button id="undoPins" class="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded font-medium text-xs sm:text-sm transition shadow" disabled>↶ Deshacer</button>
+<button id="redoPins" class="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded font-medium text-xs sm:text-sm transition shadow" disabled>↷ Rehacer</button>
+<button id="saveBackup" class="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded font-medium text-xs sm:text-sm transition shadow">💾 Guardar copia</button>
+<button id="loadBackup" class="bg-indigo-800 hover:bg-indigo-700 text-white px-3 py-1.5 rounded font-medium text-xs sm:text-sm transition shadow">📂 Restaurar copia</button>
+<input id="backupInput" type="file" accept=".json,application/json" class="hidden">
+<button id="clearPins" class="bg-red-600/80 hover:bg-red-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded font-medium text-xs sm:text-sm transition shadow">🗑️ Limpiar mis pings</button>
+<span id="saveStatus" class="text-[10px] sm:text-xs text-emerald-300 px-2">Autoguardado local</span>
 </div>
+
+<p class="mb-2 text-center text-[10px] sm:text-xs text-slate-400">Los pings se autoguardan en este navegador. El respaldo JSON guarda los pings e historial (no incluye la imagen); para restaurarlo, carga primero la misma imagen del mapa. El guardado todavía no se sincroniza entre distintos miembros/equipos.</p>
 
 <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-amber-500/50 rounded-xl bg-slate-900/50 w-full max-w-7xl relative overflow-hidden shadow-2xl transition">
 <div id="placeholder" class="text-center text-slate-400 py-32 px-4">
@@ -225,6 +248,14 @@ let pinSize=100;
 document.documentElement.style.setProperty('--pin-scale','1');
 pinSizeRange.addEventListener('input',()=>{pinSize=Number(pinSizeRange.value);pinSizeValue.textContent=pinSize+'%';document.documentElement.style.setProperty('--pin-scale',String(pinSize/100));});
 let pins=[],tempClickCoords={x:0,y:0},scale=1,panX=0,panY=0,isDragging=false,startX=0,startY=0,hasDragged=false;
+const undoPinsBtn=document.getElementById('undoPins'),redoPinsBtn=document.getElementById('redoPins'),saveBackupBtn=document.getElementById('saveBackup'),loadBackupBtn=document.getElementById('loadBackup'),backupInput=document.getElementById('backupInput'),saveStatus=document.getElementById('saveStatus');
+const MAX_HISTORY=30, LOCAL_USER_STORAGE_KEY='albionTrackerLocalUserV21';
+let undoStack=[],redoStack=[],currentMapKey=null;
+let localUserId=null;
+try{localUserId=localStorage.getItem(LOCAL_USER_STORAGE_KEY)}catch(_){/* almacenamiento local no disponible */}
+if(!localUserId){localUserId=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('local-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10));try{localStorage.setItem(LOCAL_USER_STORAGE_KEY,localUserId)}catch(_){/* la app sigue funcionando sin persistencia */}}
+const localStorageKeyForMap=key=>'albionTrackerV21_1_'+key;
+const clonePins=value=>JSON.parse(JSON.stringify(value));
 
 const ALBION_CAMPS={
 camp_wood:`<svg class="albion-camp-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 43L42 26L54 33L24 51Z" fill="#7a4725" stroke="#e8b77a" stroke-width="2.5"/><path d="M12 43L24 51L24 57L12 49Z" fill="#4b2b18" stroke="#b77b43" stroke-width="1.5"/><ellipse cx="42" cy="29.5" rx="6" ry="4" transform="rotate(-30 42 29.5)" fill="#dca36a" stroke="#f7d6a5" stroke-width="2"/><path d="M9 28L39 11L51 18L21 36Z" fill="#a96b36" stroke="#edc18b" stroke-width="2.5"/><path d="M9 28L21 36L21 42L9 34Z" fill="#63391f"/><ellipse cx="39" cy="14.5" rx="6" ry="4" transform="rotate(-30 39 14.5)" fill="#e0ad76" stroke="#f8d9aa" stroke-width="2"/></svg>`,
@@ -328,7 +359,15 @@ function showMap(){
  mapContainer.style.height=mapImage.naturalHeight+'px';
  const availableWidth=Math.max(320,window.innerWidth-300);
  mapViewport.style.width=Math.min(mapImage.naturalWidth,availableWidth)+'px';
- resetZoomAndPan();pins=[];renderPins();
+ resetZoomAndPan();
+ currentMapKey=createMapFingerprint(mapImage.src,mapImage.naturalWidth,mapImage.naturalHeight);
+ loadLocalStateForCurrentMap();
+ renderPins();
+}
+function createMapFingerprint(src,width,height){
+ let hash=2166136261;const step=Math.max(1,Math.floor((src||'').length/12000));
+ for(let i=0;i<(src||'').length;i+=step){hash^=(src||'').charCodeAt(i);hash=Math.imul(hash,16777619)}
+ return `${width}x${height}-${(src||'').length}-${(hash>>>0).toString(16)}`;
 }
 function updateTransform(){mapContainer.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;zoomLevelDisplay.innerText=`${Math.round(scale*100)}%`}
 function resetZoomAndPan(){scale=1;panX=0;panY=0;updateTransform()}
@@ -349,10 +388,72 @@ mapViewport.addEventListener('click',e=>{
   pinModal.classList.remove('hidden');pinModal.classList.add('flex');
  }
 });
-function addPin(iconType,label,pinTierClass='',badgeClass='',tierText=''){pins.push({x:tempClickCoords.x,y:tempClickCoords.y,iconType,label,pinTierClass,badgeClass,tierText});closeModal();renderPins()}
+function addPin(iconType,label,pinTierClass='',badgeClass='',tierText=''){
+ recordPinChange();
+ pins.push({id:createPinId(),x:tempClickCoords.x,y:tempClickCoords.y,iconType,label,pinTierClass,badgeClass,tierText,ownerId:localUserId,ownerLabel:'Este navegador'});
+ closeModal();renderPins();persistLocalState();
+}
+function createPinId(){return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():('pin-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9))}
+function recordPinChange(){
+ undoStack.push(clonePins(pins));if(undoStack.length>MAX_HISTORY)undoStack.shift();redoStack=[];updateHistoryButtons();
+}
+function updateHistoryButtons(){undoPinsBtn.disabled=undoStack.length===0;redoPinsBtn.disabled=redoStack.length===0}
+function loadLocalStateForCurrentMap(){
+ undoStack=[];redoStack=[];pins=[];
+ if(!currentMapKey){updateHistoryButtons();return}
+ try{
+  const saved=localStorage.getItem(localStorageKeyForMap(currentMapKey));
+  if(saved){const state=JSON.parse(saved);if(state&&state.mapKey===currentMapKey&&Array.isArray(state.pins)){
+   pins=normalizePins(state.pins);undoStack=Array.isArray(state.undoStack)?state.undoStack.slice(-MAX_HISTORY):[];redoStack=Array.isArray(state.redoStack)?state.redoStack.slice(-MAX_HISTORY):[];
+   saveStatus.textContent='Mapa recuperado automáticamente';
+  }else saveStatus.textContent='Autoguardado local';
+ }else saveStatus.textContent='Autoguardado local';
+ }catch(error){console.warn('No se pudo recuperar el estado local:',error);saveStatus.textContent='No se pudo leer el guardado local'}
+ updateHistoryButtons();
+}
+function normalizePins(list){
+ return list.map(pin=>({...pin,id:pin.id||createPinId(),ownerId:pin.ownerId||localUserId,ownerLabel:pin.ownerLabel||'Este navegador'}));
+}
+function persistLocalState(){
+ if(!currentMapKey){saveStatus.textContent='Carga un mapa para guardar';return}
+ const state={version:'21.1',mapKey:currentMapKey,pins,undoStack:undoStack.slice(-MAX_HISTORY),redoStack:redoStack.slice(-MAX_HISTORY),savedAt:new Date().toISOString()};
+ try{localStorage.setItem(localStorageKeyForMap(currentMapKey),JSON.stringify(state));saveStatus.textContent='Guardado automáticamente';}
+ catch(error){console.warn('No se pudo autoguardar:',error);saveStatus.textContent='Guardado local lleno; exporta una copia'}
+ updateHistoryButtons();
+}
+function undoPinChange(){if(!undoStack.length)return;redoStack.push(clonePins(pins));pins=normalizePins(undoStack.pop());renderPins();persistLocalState()}
+function redoPinChange(){if(!redoStack.length)return;undoStack.push(clonePins(pins));if(undoStack.length>MAX_HISTORY)undoStack.shift();pins=normalizePins(redoStack.pop());renderPins();persistLocalState()}
+function saveBackupFile(){
+ if(!currentMapKey){alert('Primero carga el mapa que quieres respaldar.');return}
+ const backup={app:'Albion Tracker',version:'21.1',mapKey:currentMapKey,exportedAt:new Date().toISOString(),pins,undoStack:undoStack.slice(-MAX_HISTORY),redoStack:redoStack.slice(-MAX_HISTORY)};
+ const blob=new Blob([JSON.stringify(backup)],{type:'application/json'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='albion-tracker-respaldo.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);saveStatus.textContent='Copia descargada';
+}
+function restoreBackupFile(file){
+ if(!file)return;const reader=new FileReader();reader.onload=()=>{try{
+  const backup=JSON.parse(reader.result);if(backup.app!=='Albion Tracker'||!Array.isArray(backup.pins))throw new Error('Formato inválido');
+  if(!currentMapKey){alert('Primero carga la misma imagen del mapa y luego restaura la copia.');return}
+  if(backup.mapKey!==currentMapKey){alert('La copia corresponde a otra imagen. Carga el mapa original y vuelve a intentarlo.');return}
+  const before=clonePins(pins);
+  const backupHistory=Array.isArray(backup.undoStack)?backup.undoStack.slice(-MAX_HISTORY):[];
+  undoStack=[...backupHistory,before].slice(-MAX_HISTORY);redoStack=[];
+  pins=normalizePins(backup.pins);
+  renderPins();persistLocalState();saveStatus.textContent='Copia restaurada';alert('Respaldo restaurado correctamente.');
+ }catch(error){console.error(error);alert('No se pudo restaurar el archivo. Asegúrate de seleccionar un respaldo JSON válido de Albion Tracker.')}};reader.readAsText(file);
+}
+undoPinsBtn.addEventListener('click',undoPinChange);redoPinsBtn.addEventListener('click',redoPinChange);saveBackupBtn.addEventListener('click',saveBackupFile);loadBackupBtn.addEventListener('click',()=>backupInput.click());backupInput.addEventListener('change',e=>{restoreBackupFile(e.target.files[0]);e.target.value=''});
+document.addEventListener('keydown',e=>{
+ const typing=e.target&&(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable);
+ if(typing||!(e.ctrlKey||e.metaKey))return;
+ if(e.key.toLowerCase()==='z'&&!e.shiftKey){e.preventDefault();undoPinChange()}
+ else if(e.key.toLowerCase()==='y'||(e.key.toLowerCase()==='z'&&e.shiftKey)){e.preventDefault();redoPinChange()}
+});
 function closeModal(){pinModal.classList.add('hidden');pinModal.classList.remove('flex')}
 function renderPins(){
  pinsLayer.innerHTML='';
+ const connectorSvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+ connectorSvg.setAttribute('class','pin-cluster-lines');
+ connectorSvg.setAttribute('aria-hidden','true');
+ pinsLayer.appendChild(connectorSvg);
  pins.forEach((pin,index)=>{
   const el=document.createElement('div');
   let kind='';
@@ -372,14 +473,64 @@ function renderPins(){
    'Araña':'Araña','Alerta / PvP':'Alerta\nPvP','Cofre de Tesoro':'Cofre\nBoss','Portal Mágico / Mist':'Portal\nMist'
   };
   el.querySelector('.pin-label-text').textContent=compactLabels[pin.label]||pin.label;
-  el.title=`${pin.label} (Pin #${index+1}) — clic para eliminar`;
+  const ownedByCurrentUser=!pin.ownerId||pin.ownerId===localUserId;
+  el.title=`${pin.label} — ${ownedByCurrentUser?'clic izquierdo: ver etiquetas · clic derecho: borrar':'ping de otro usuario · no puedes borrarlo'}`;
   el.setAttribute('aria-label',el.title);
-  el.addEventListener('click',e=>{e.stopPropagation();pins.splice(index,1);renderPins()});
+  el.addEventListener('click',e=>{e.stopPropagation();showPinCluster(index,connectorSvg)});
+  el.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();deletePin(index)});
+  el.addEventListener('mouseenter',()=>showPinCluster(index,connectorSvg));
+  el.addEventListener('focus',()=>showPinCluster(index,connectorSvg));
+  el.addEventListener('mouseleave',()=>hidePinCluster(connectorSvg));
   pinsLayer.appendChild(el);
  });
 }
+function deletePin(index){
+ const pin=pins[index];if(!pin)return;
+ if(pin.ownerId&&pin.ownerId!==localUserId){alert('Este ping pertenece a otro usuario. Solo quien lo creó puede borrarlo.');return}
+ recordPinChange();pins.splice(index,1);renderPins();persistLocalState();
+}
+function showPinCluster(index,svg){
+ const els=[...pinsLayer.querySelectorAll('.pin')];
+ const rect=mapImage.getBoundingClientRect();
+ if(!rect.width||!rect.height)return;
+ const anchor=pins[index], ax=anchor.x/100*rect.width, ay=anchor.y/100*rect.height;
+ const nearby=pins.map((p,i)=>({p,i,x:p.x/100*rect.width,y:p.y/100*rect.height}))
+  .filter(o=>Math.hypot(o.x-ax,o.y-ay)<=68);
+ els.forEach(el=>el.classList.remove('cluster-label-active'));
+ svg.innerHTML='';
+ const ns='http://www.w3.org/2000/svg';
+ const count=nearby.length;
+ nearby.forEach((o,j)=>{
+  const el=els[o.i];
+  const col=(j%3)-1, row=Math.floor(j/3);
+  const dx=count===1?0:col*92;
+  const dy=count===1?2:12+row*23;
+  el.style.setProperty('--label-dx',dx+'px');
+  el.style.setProperty('--label-dy',dy+'px');
+  el.classList.add('cluster-label-active');
+  if(count>1){
+   const line=document.createElementNS(ns,'line');
+   const x1=o.p.x/100*mapImage.clientWidth, y1=o.p.y/100*mapImage.clientHeight-5;
+   const x2=x1+dx, y2=y1-26-dy;
+   line.setAttribute('x1',x1);line.setAttribute('y1',y1);
+   line.setAttribute('x2',x2);line.setAttribute('y2',y2);
+   line.setAttribute('class','pin-cluster-line');
+   svg.appendChild(line);
+  }
+ });
+}
+function hidePinCluster(svg){
+ pinsLayer.querySelectorAll('.pin.cluster-label-active').forEach(el=>el.classList.remove('cluster-label-active'));
+ svg.innerHTML='';
+}
 downloadMapBtn.addEventListener('click',async()=>{if(!mapImage.src||!mapImage.naturalWidth){alert('Primero pega o carga un mapa.');return;}if(typeof html2canvas!=='function'){alert('No se pudo cargar el exportador. Revisa tu conexión a internet e inténtalo otra vez.');return;}const oldTransform=mapContainer.style.transform,oldWidth=mapContainer.style.width,oldHeight=mapContainer.style.height,oldImgWidth=mapImage.style.width,oldImgHeight=mapImage.style.height,oldViewportHeight=mapViewport.style.height,stageWidth=document.getElementById('mapStage').style.width,stagePadding=document.getElementById('mapStage').style.padding;try{downloadMapBtn.disabled=true;downloadMapBtn.textContent='Preparando imagen…';mapContainer.style.transform='none';mapContainer.style.width=mapImage.naturalWidth+'px';mapContainer.style.height=mapImage.naturalHeight+'px';mapImage.style.width=mapImage.naturalWidth+'px';mapImage.style.height=mapImage.naturalHeight+'px';mapViewport.style.width=mapImage.naturalWidth+'px';mapViewport.style.height=mapImage.naturalHeight+'px';const stage=document.getElementById('mapStage');stage.classList.add('exporting');stage.style.width=(mapImage.naturalWidth+246)+'px';stage.style.padding='12px';await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const canvas=await html2canvas(stage,{backgroundColor:'#0b0f19',scale:2,useCORS:true,allowTaint:false,logging:false,width:mapImage.naturalWidth+246,height:Math.max(mapImage.naturalHeight,document.getElementById('mapLegend').offsetHeight)+24,windowWidth:Math.max(window.innerWidth,mapImage.naturalWidth+260),windowHeight:Math.max(window.innerHeight,mapImage.naturalHeight+30)});const link=document.createElement('a');link.download='albion-mapa-con-pines.png';link.href=canvas.toDataURL('image/png');link.click();}catch(err){console.error(err);alert('No se pudo exportar la imagen. Prueba nuevamente.');}finally{document.getElementById('mapStage').classList.remove('exporting');mapContainer.style.transform=oldTransform;mapContainer.style.width=oldWidth;mapContainer.style.height=oldHeight;mapImage.style.width=oldImgWidth;mapImage.style.height=oldImgHeight;mapViewport.style.height=oldViewportHeight;mapViewport.style.width='';document.getElementById('mapStage').style.width=stageWidth;document.getElementById('mapStage').style.padding=stagePadding;downloadMapBtn.disabled=false;downloadMapBtn.textContent='⬇️ Descargar mapa con pines';}});
-clearPinsBtn.addEventListener('click',()=>{pins=[];renderPins()});
+clearPinsBtn.addEventListener('click',()=>{
+ const ownPins=pins.filter(pin=>!pin.ownerId||pin.ownerId===localUserId).length;
+ if(!ownPins){alert('No tienes pings propios para limpiar.');return}
+ if(!confirm(`¿Eliminar tus ${ownPins} pings? Los pings de otros usuarios se conservarán.`))return;
+ recordPinChange();pins=pins.filter(pin=>pin.ownerId&&pin.ownerId!==localUserId);renderPins();persistLocalState();
+});
+mapViewport.addEventListener('contextmenu',e=>{if(!e.target.closest('.pin'))e.preventDefault()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 </script>
 </body>
